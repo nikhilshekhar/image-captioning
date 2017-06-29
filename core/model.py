@@ -4,7 +4,8 @@ import tensorflow as tf
 import pandas as pd
 from tensorflow.python.ops import rnn_cell
 from keras.preprocessing import sequence
-from imageCaptioning.cnn_util import *
+from core.imageCaptioning.cnn_util import *
+import numpy as np
 
 model_path = '/Users/nikhilshekhar/PycharmProjects/TensorFlow/imageCaptioning/'
 vgg_path = '/Users/nikhilshekhar/Downloads/vgg16.tfmodel'
@@ -21,7 +22,7 @@ n_epochs = 1000
 
 class CaptionGenerator():
     def init_weight(self, dim_in, dim_out, name=None, stddev=1.0):
-        return tf.Variable(tf.truncated_normal([dim_in, dim_out], stddev=stddev/math.sqrt(float(dim_in))), name=name)
+        return tf.Variable(tf.truncated_normal([dim_in, dim_out], stddev=stddev / math.sqrt(float(dim_in))), name=name)
 
     def init_bias(self, dim_out, name=None):
         return tf.Variable(tf.zeros([dim_out]), name=name)
@@ -69,7 +70,7 @@ class CaptionGenerator():
                     current_emb = image_emb
                 else:
                     with tf.device("/cpu:0"):
-                        current_emb = tf.nn.embedding_lookup(self.Wemb, sentence[:, i-1]) + self.bemb
+                        current_emb = tf.nn.embedding_lookup(self.Wemb, sentence[:, i - 1]) + self.bemb
 
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
@@ -81,7 +82,7 @@ class CaptionGenerator():
                     indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1)
                     concated = tf.concat(1, [indices, labels])
                     onehot_labels = tf.sparse_to_dense(
-                            concated, tf.pack([self.batch_size, self.n_words]), 1.0, 0.0)
+                        concated, tf.pack([self.batch_size, self.n_words]), 1.0, 0.0)
 
                     logit_words = tf.matmul(output, self.embed_word_W) + self.embed_word_b
                     cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logit_words, onehot_labels)
@@ -90,7 +91,7 @@ class CaptionGenerator():
                     current_loss = tf.reduce_sum(cross_entropy)
                     loss = loss + current_loss
 
-            loss = loss / tf.reduce_sum(mask[:,1:])
+            loss = loss / tf.reduce_sum(mask[:, 1:])
             return loss, image, sentence, mask
 
     def build_generator(self, maxlen):
@@ -131,13 +132,13 @@ def get_caption_data(annotation_path, feat_path):
 
 
 def preProBuildWordVocab(sentence_iterator, word_count_threshold=30):
-    print('Pre-processing word counts and creating vocab based on word count threshold %d' % (word_count_threshold, ))
+    print('Pre-processing word counts and creating vocab based on word count threshold %d' % (word_count_threshold,))
     word_counts = {}
     nsents = 0
     for sent in sentence_iterator:
-      nsents += 1
-      for w in sent.lower().split(' '):
-        word_counts[w] = word_counts.get(w, 0) + 1
+        nsents += 1
+        for w in sent.lower().split(' '):
+            word_counts[w] = word_counts.get(w, 0) + 1
     vocab = [w for w in word_counts if word_counts[w] >= word_count_threshold]
     print('filtered words from %d to %d' % (len(word_counts), len(vocab)))
 
@@ -152,7 +153,7 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=30):
         ix += 1
 
     word_counts['.'] = nsents
-    bias_init_vector = np.array([1.0*word_counts[ixtoword[i]] for i in ixtoword])
+    bias_init_vector = np.array([1.0 * word_counts[ixtoword[i]] for i in ixtoword])
     bias_init_vector /= np.sum(bias_init_vector)
     bias_init_vector = np.log(bias_init_vector)
     bias_init_vector -= np.max(bias_init_vector)
@@ -160,7 +161,6 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=30):
 
 
 def train():
-
     learning_rate = 0.001
     feats, captions = get_caption_data(annotation_path, feat_path)
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions)
@@ -175,15 +175,15 @@ def train():
 
     sess = tf.InteractiveSession()
     n_words = len(wordtoix)
-    maxlen = np.max( list(map(lambda x: len(x.split(' ')), captions) ))
+    maxlen = np.max(list(map(lambda x: len(x.split(' ')), captions)))
     caption_generator = CaptionGenerator(
-            dim_image=dim_image,
-            dim_hidden=dim_hidden,
-            dim_embed=dim_embed,
-            batch_size=batch_size,
-            n_lstm_steps=maxlen+2,
-            n_words=n_words,
-            bias_init_vector=bias_init_vector)
+        dim_image=dim_image,
+        dim_hidden=dim_hidden,
+        dim_embed=dim_embed,
+        batch_size=batch_size,
+        n_lstm_steps=maxlen + 2,
+        n_words=n_words,
+        bias_init_vector=bias_init_vector)
 
     loss, image, sentence, mask = caption_generator.build_model()
 
@@ -192,18 +192,22 @@ def train():
     tf.initialize_all_variables().run()
 
     for epoch in range(n_epochs):
-        for start, end in zip(range(0, len(feats), batch_size),range(batch_size, len(feats), batch_size)):
+        for start, end in zip(range(0, len(feats), batch_size), range(batch_size, len(feats), batch_size)):
 
             current_feats = feats[start:end]
             current_captions = captions[start:end]
 
-            current_caption_ind = map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ')[:-1] if word in wordtoix], current_captions)
+            current_caption_ind = map(
+                lambda cap: [wordtoix[word] for word in cap.lower().split(' ')[:-1] if word in wordtoix],
+                current_captions)
 
-            current_caption_matrix = sequence.pad_sequences(list(current_caption_ind), padding='post', maxlen=maxlen+1)
-            current_caption_matrix = np.hstack([np.full((len(current_caption_matrix),1), 0), current_caption_matrix]).astype(int)
+            current_caption_matrix = sequence.pad_sequences(list(current_caption_ind), padding='post',
+                                                            maxlen=maxlen + 1)
+            current_caption_matrix = np.hstack(
+                [np.full((len(current_caption_matrix), 1), 0), current_caption_matrix]).astype(int)
 
             current_mask_matrix = np.zeros((current_caption_matrix.shape[0], current_caption_matrix.shape[1]))
-            nonzeros = np.array(list(map(lambda x: (x != 0).sum()+2, current_caption_matrix)))
+            nonzeros = np.array(list(map(lambda x: (x != 0).sum() + 2, current_caption_matrix)))
 
             for ind, row in enumerate(current_mask_matrix):
                 row[:nonzeros[ind]] = 1
@@ -212,7 +216,7 @@ def train():
                 image: current_feats,
                 sentence: current_caption_matrix,
                 mask: current_mask_matrix
-                })
+            })
 
             print("Current Cost: ", loss_value)
 
